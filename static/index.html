@@ -10,7 +10,7 @@
         
         Licensed under the Apache License, Version 2.0 (the "License");
         you may not use this file except in compliance with the License.
-        You may obtain a copy of the License at
+        You may obtain a copy of the License ats
         
             http://www.apache.org/licenses/LICENSE-2.0
         
@@ -35,6 +35,21 @@ var W = canvas.width  = window.innerWidth-6;
 var H = canvas.height = window.innerHeight-50;
 var wscounter = 0;
 var socket;
+world = {};
+
+var drawNext = true;
+var counter = 0;
+// contain the  pre update info to upade entity
+var temp_counter = counter;
+// global var design for mouse feature
+
+var colours = ["hsl(0, 100%, 50%)","hsl(1, 100%, 50%)","hsl(2, 100%, 50%)","hsl(3, 100%, 50%)","hsl(4, 100%, 50%)","hsl(5, 100%, 50%)","hsl(6, 100%, 50%)","hsl(7, 100%, 50%)"];
+var cur_color = "hsl(0, 100%, 50%)";
+var cur_radius = 10;
+var bigger_flag = 1;
+
+
+
 
 function debug(str) {
     var debugDiv = document.getElementById('debug');
@@ -42,22 +57,28 @@ function debug(str) {
 }
 debug("Test");
 
-world = {};
+
 
 //XXX: TODO Make this prettier!
 function drawCircle(context,entity) {
     with(context) {
-        beginPath();                
+        beginPath();              
         lineWidth = 3;
         var x = entity["x"];
         var y = entity["y"];
         //moveTo(x,y);
         fillStyle = entity["colour"];
-        strokeStyle = fillStyle;
-        arc(x, y, (entity["radius"])?entity["radius"]:50, 0, 2.0 * Math.PI, false);  
+        // strokeStyle = fillStyle;
+        arc(x, y, (entity["radius"])?entity["radius"]:10, 0, 2.0 * Math.PI, false);
+
+        //fill colour
+        strokeStyle = fillStyle;  
+        fill();
         stroke();                                
     }
 }
+
+
 
 function prepEntity(entity) {
     if (!entity["colour"]) {
@@ -121,11 +142,18 @@ function getPosition(e) {
 	}
 }
 
+
+
 function addEntity(entity, data) {
     world[entity] = data;
-    drawNextFrame(); // (but should we?)
-    //XXX: Send a XHTML Request that updates the entity you just modified!
+    // sendJSON_usingSocket
+    entity_dict = {}
+    entity_dict[entity] = data
+
+    socket.send(JSON.stringify(entity_dict || null )); // dict => json
 }
+
+
 var counter = 0;
 function addEntityWithoutName(data) {
     var name = "X"+(counter++)%100;
@@ -228,24 +256,95 @@ mouse = (function() {
     return self;
 })();
 
+
+
 // Add the application specific mouse listeners!
 //XXX: TODO Make these prettier!
 mouse.mousedowners.push(function(x,y,clicked,e) {
-    addEntityWithoutName({'x':x,'y':y,'colour':'blue'});
+
+    cur_color = colours[Math.floor(Math.random() * 8 )];
+
+    if (cur_radius > 90) {
+        bigger_flag = 0;
+
+    } 
+
+    if (bigger_flag) {
+        cur_radius = cur_radius - 5;
+    } else {
+        cur_radius = cur_radius - 15;
+    }
+
+
+    if (cur_radius < 10 ) {
+        cur_radius = 10;
+        bigger_flag = 1;
+    }
+
+    addEntityWithoutName({'x':x,'y':y,'colour': cur_color, 'radius':cur_radius });
 });
 
 mouse.mouseuppers.push(function(x,y,clicked,e) {
-    addEntityWithoutName({'x':x,'y':y,'colour':'red'});
+    cur_color = colours[Math.round(Math.random() * 8)];
+    cur_radius = cur_radius + 10;
+
+    if (cur_radius > 100 ) {
+        cur_radius = 100;
+    }
+
+    addEntityWithoutName({'x':x,'y':y,'colour': cur_color, 'radius':cur_radius});
 });
 
 mouse.mousedraggers.push(function(x,y,clicked,e) {
-    addEntityWithoutName({'x':x,'y':y,'colour':'green',
-                          'radius':10});
+    addEntityWithoutName({'x':x,'y':y,'colour':cur_color ,
+                          'radius':cur_radius});
 });
 
 
+// update world with specific objs
+function updateWorldWith(objs) {
+
+    for (var key in objs) {
+        world[key] = objs[key];
+        counter++;
+    }
+    temp_counter = counter;
+}
+
+
+function update_callback(objs){
+
+    // we can  clear, @ can be optimze
+    if (objs.length != 0) {
+
+        // user just typed clear in url, we need to refresh whole world!
+        if ("clear" in objs) {
+            alert("some one clear world"); // we can clear problem, @ can be optimze
+            world_clean(objs);
+
+        } else {
+            // we can just update world diff
+
+            updateWorldWith(objs);
+            drawNextFrame(); // we have new info
+            // }
+        }
+    }
+}
+
+//update whole world after clear
+function world_clean(server_world) {
+    if (server_world.length != 0) {
+        world = server_world;
+        drawNextFrame();
+    }
+
+}
+
 function update() {
+    // we only need to draw frame here, since ws will auto update data from 
     drawFrame();
+
 }
 
 
@@ -254,6 +353,7 @@ function wsSetup() {
     socket = new WebSocket(url);
     socket.onopen = function() {
         //XXX: TODO What are you going to do here?
+        console.log("ACK, socket connection built")
     };
     socket.onerror = function(msg) {
         debug("WebSocket Error:" + msg.data);
@@ -261,13 +361,64 @@ function wsSetup() {
     socket.onmessage = function(msg) {  
         try {
             debug("WebSocket Recv:" + msg.data);
-            //XXX: TODO What are you going to do here?            
+            //XXX: TODO What are you going to do here?
+
+            var message = JSON.parse(msg.data);
+            update_callback(message); // update info
+                        
         } catch (e) {
             alert("socket on message: " + e);
         }
     }; 
 }
 
+
+
+
+// send put json request, design for register
+function world_sendJSONXMLHTTPRequest(url , callback) {
+    var xhr = new XMLHttpRequest();
+    xhr.onreadystatechange = function () {
+        if (xhr.readyState==4) {
+            try {
+                if (xhr.status==200) {
+                    //pass
+                    // update accoding returned info  
+                    text = xhr.responseText;
+                    if (text) {
+
+                        world = JSON.parse(text);
+                        drawNextFrame();
+                    }
+                }
+            } 
+            catch(e) {
+                alert('Error PUT: ' + e.name);
+            }
+        }
+    };
+
+    //XXX: GET to a URL
+    xhr.open("GET", url);
+    //XXX: set the mimetype and the accept headers!
+    xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+    xhr.send();
+}
+
+
+
+
+//register for world, we can design a listener pattern 
+function register() {
+    var url = "http://"+host+"/world";
+    world_sendJSONXMLHTTPRequest(url);
+
+    drawFrame();
+}
+
+
+
+register();
 wsSetup();
 
 
