@@ -103,6 +103,7 @@ myWorld = World()
 
 def set_listener( entity, data ):
     ''' do something with the update ! '''
+    # can use this method
 
     # self.listeners[listener][entity] = data
 
@@ -115,8 +116,6 @@ myWorld.add_set_listener( set_listener )
 def hello():
     '''Return something coherent here.. perhaps redirect to /static/index.html '''
     return redirect("/static/index.html")
-
-
 
 
 def read_ws(ws,client):
