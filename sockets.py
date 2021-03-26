@@ -97,8 +97,6 @@ def send_all_json(obj):
     send_all( json.dumps(obj) )
 
 
-
-
 myWorld = World()        
 
 def set_listener( entity, data ):
